@@ -1,0 +1,54 @@
+---
+
+- name: Install java
+  yum:
+    name: java-1.8.0-openjdk-headless
+    state: present
+
+- name: Download clouseau
+  get_url:
+    url: https://github.com/cloudant-labs/clouseau/releases/download/2.17.0/clouseau-2.17.0-dist.zip
+    dest: /root/clouseau-2.17.0-dist.zip
+
+- name: Unpack clouseau
+  unarchive:
+    remote_src: yes
+    src: /root/clouseau-2.17.0-dist.zip
+    dest: /opt/
+
+- name: Create clouseau config directory
+  file:
+    path: /etc/clouseau
+    state: directory
+
+- name: Create clouseau data directory
+  file:
+    path: /var/lib/clouseau
+    state: directory
+
+- name: Configure clouseau
+  template:
+    src: clouseau.ini.j2
+    dest: /etc/clouseau/clouseau.sh
+
+- name: Configure clouseau
+  template:
+    src: log4j.properties.j2
+    dest: /etc/clouseau/log4j.properties
+
+- name: Create run script
+  template:
+    src: clouseau.sh.j2
+    dest: /opt/clouseau-2.17.0/clouseau.sh
+    mode: "0700"
+
+- name: Create systemd service
+  template:
+    src: clouseau.service.j2
+    dest: /lib/systemd/system/clouseau.service
+
+- name: Enable systemd service
+  service:
+    name: clouseau
+    enabled: yes
+    state: restarted

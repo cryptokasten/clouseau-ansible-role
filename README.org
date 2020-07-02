@@ -1,0 +1,166 @@
+#+TITLE: Clouseau ansible role
+
+** Tasks
+*** main
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+---
+#+END_SRC
+
+**** Install java
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Install java
+  yum:
+    name: java-1.8.0-openjdk-headless
+    state: present
+#+END_SRC
+
+**** Download clouseau
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Download clouseau
+  get_url:
+    url: https://github.com/cloudant-labs/clouseau/releases/download/2.17.0/clouseau-2.17.0-dist.zip
+    dest: /root/clouseau-2.17.0-dist.zip
+#+END_SRC
+
+**** Unpack clouseau
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Unpack clouseau
+  unarchive:
+    remote_src: yes
+    src: /root/clouseau-2.17.0-dist.zip
+    dest: /opt/
+#+END_SRC
+
+**** Create clouseau config directory
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Create clouseau config directory
+  file:
+    path: /etc/clouseau
+    state: directory
+#+END_SRC
+
+**** Create clouseau data directory
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Create clouseau data directory
+  file:
+    path: /var/lib/clouseau
+    state: directory
+#+END_SRC
+
+**** Configure clouseau
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Configure clouseau
+  template:
+    src: clouseau.ini.j2
+    dest: /etc/clouseau/clouseau.sh
+#+END_SRC
+
+**** Configure log4j
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Configure clouseau
+  template:
+    src: log4j.properties.j2
+    dest: /etc/clouseau/log4j.properties
+#+END_SRC
+
+**** Create run script
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Create run script
+  template:
+    src: clouseau.sh.j2
+    dest: /opt/clouseau-2.17.0/clouseau.sh
+    mode: "0700"
+#+END_SRC
+
+**** Create systemd unit file
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Create systemd service
+  template:
+    src: clouseau.service.j2
+    dest: /lib/systemd/system/clouseau.service
+#+END_SRC
+
+**** Enable systemd service
+
+#+BEGIN_SRC yaml :tangle ansible/tasks/main.yml
+- name: Enable systemd service
+  service:
+    name: clouseau
+    enabled: yes
+    state: restarted
+#+END_SRC
+
+** Templates
+*** clouseau.ini.j2
+
+#+BEGIN_SRC conf :tangle ansible/templates/clouseau.ini.j2
+[clouseau]
+
+; the name of the Erlang node created by the service, leave this unchanged
+name=clouseau@127.0.0.1
+
+; set this to the same distributed Erlang cookie used by the CouchDB nodes
+cookie=monster
+
+; the path where you would like to store the search index files
+dir=/var/lib/clouseau
+
+; the number of search indexes that can be open simultaneously
+max_indexes_open=500
+#+END_SRC
+
+*** log4j.properties.j2
+
+#+BEGIN_SRC conf :tangle ansible/templates/log4j.properties.j2
+log4j.rootLogger=debug, CONSOLE
+log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} %c [%p] %m%n
+#+END_SRC
+
+*** clouseau.sh.j2
+
+#+BEGIN_SRC sh :tangle ansible/templates/clouseau.sh.j2
+#!/bin/bash
+
+java -server \
+     -Xmx512m \
+     -Dsun.net.inetaddr.ttl=30 \
+     -Dsun.net.inetaddr.negative.ttl=30 \
+     -Dlog4j.configuration=file:/etc/clouseau/log4j.properties \
+     -XX:OnOutOfMemoryError="kill -9 %p" \
+     -XX:+UseConcMarkSweepGC \
+     -XX:+CMSParallelRemarkEnabled \
+     -classpath '/opt/clouseau-2.17.0/*' \
+     com.cloudant.clouseau.Main \
+     /etc/clouseau/clouseau.ini
+#+END_SRC
+
+*** clouseau.service.j2
+
+#+BEGIN_SRC conf :tangle ansible/templates/clouseau.service.j2
+[Unit]
+Description=Clouseau
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/lib/clouseau
+ExecStart=/opt/clouseau-2.17.0/clouseau.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+#+END_SRC
+
